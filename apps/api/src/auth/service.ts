@@ -6,7 +6,7 @@ import type { Config } from '../config';
 import type { EventPublisher } from '../events';
 import type { Logger } from '../logger';
 import { conflict, unauthorized } from '../http/errors';
-import { generateOpaqueToken, hashToken, signAccessToken } from './tokens';
+import { generateOpaqueToken, hashToken, signAccessToken } from '@huddle/shared/server';
 
 export interface ClientMeta {
   userAgent?: string | undefined;

@@ -1,5 +1,6 @@
 import { ROLES } from '@huddle/shared';
 import {
+  bigserial,
   customType,
   index,
   integer,
@@ -168,3 +169,42 @@ export const boards = pgTable(
 export type DbWorkspace = typeof workspaces.$inferSelect;
 export type DbInvite = typeof invites.$inferSelect;
 export type DbBoard = typeof boards.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Board documents (Yjs persistence)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compacted Yjs state per board: Y.encodeStateAsUpdate of a doc that has had
+ * the snapshot plus every pending update applied (with GC on, so deleted
+ * content is reduced to tombstone ranges).
+ */
+export const boardDocuments = pgTable('board_documents', {
+  boardId: uuid('board_id')
+    .primaryKey()
+    .references(() => boards.id, { onDelete: 'cascade' }),
+  state: bytea('state').notNull(),
+  /** How many incremental updates have been folded into this snapshot, ever. */
+  compactedUpdates: integer('compacted_updates').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only log of incremental updates received since the last snapshot.
+ * Appending is cheap and happens within a few hundred ms of an edit, so a
+ * crash between (debounced) snapshots loses nothing. Compaction folds these
+ * into board_documents and deletes exactly the rows it folded.
+ */
+export const boardUpdates = pgTable(
+  'board_updates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    update: bytea('update').notNull(),
+    userId: uuid('user_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('board_updates_board_idx').on(t.boardId, t.id)],
+);

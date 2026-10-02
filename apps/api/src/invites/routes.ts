@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, eq, sql } from 'drizzle-orm';
 import { invites, users, workspaceMembers, workspaces, type DbInvite } from '@huddle/db';
-import { hashToken } from '../auth/tokens';
+import { hashToken } from '@huddle/shared/server';
 import type { AppDeps } from '../deps';
 import { authOf } from '../http/auth-middleware';
 import { HttpError, notFound } from '../http/errors';

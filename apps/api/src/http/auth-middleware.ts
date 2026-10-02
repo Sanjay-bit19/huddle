@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { and, eq, isNull } from 'drizzle-orm';
 import { sessions, users, type Database } from '@huddle/db';
-import { verifyAccessToken } from '../auth/tokens';
+import { verifyAccessToken } from '@huddle/shared/server';
 import { unauthorized } from './errors';
 
 export interface AuthContext {

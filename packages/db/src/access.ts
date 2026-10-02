@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Role } from '@huddle/shared';
 import type { Database } from './client';
-import { boards, workspaceMembers } from './schema';
+import { boards, sessions, workspaceMembers } from './schema';
 
 /**
  * Membership lookups shared by the API and the collab server so both enforce
@@ -49,4 +49,19 @@ export async function getBoardAccess(
     )
     .where(eq(boards.id, boardId));
   return row ?? null;
+}
+
+/** True if the session exists, belongs to the user and has not been revoked. */
+export async function isSessionLive(
+  db: Database,
+  sessionId: string,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt)),
+    );
+  return Boolean(row);
 }

@@ -15,6 +15,13 @@
       "when": 1790917941177,
       "tag": "0001_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790918440671,
+      "tag": "0002_board_documents",
+      "breakpoints": true
     }
   ]
 }

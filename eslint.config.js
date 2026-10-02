@@ -13,6 +13,7 @@ export default tseslint.config(
       'playwright-report/**',
       'test-results/**',
       'load/dist/**',
+      'smoke*.mjs',
     ],
   },
   js.configs.recommended,

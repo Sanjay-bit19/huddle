@@ -12,7 +12,7 @@ import {
   type MemberDto,
   type WorkspaceSummary,
 } from '@huddle/shared';
-import { generateOpaqueToken, hashToken } from '../auth/tokens';
+import { generateOpaqueToken, hashToken } from '@huddle/shared/server';
 import type { AppDeps } from '../deps';
 import { requireWorkspacePermission, parseId } from '../http/access';
 import { authOf } from '../http/auth-middleware';

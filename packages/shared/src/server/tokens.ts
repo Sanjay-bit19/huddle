@@ -5,7 +5,7 @@ import {
   ACCESS_TOKEN_ISSUER,
   accessTokenClaimsSchema,
   type AccessTokenClaims,
-} from '@huddle/shared';
+} from '../schemas/auth';
 
 export function secretKey(secret: string): Uint8Array {
   return new TextEncoder().encode(secret);

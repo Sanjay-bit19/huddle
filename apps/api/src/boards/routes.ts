@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { desc, eq } from 'drizzle-orm';
-import { boards, workspaces, type DbBoard } from '@huddle/db';
+import { boards, initBoardDocument, workspaces, type DbBoard } from '@huddle/db';
 import { createBoardSchema, updateBoardSchema, type BoardDto } from '@huddle/shared';
+import { createSeedUpdate } from '@huddle/shared/board';
 import type { AppDeps } from '../deps';
 import { requireBoardPermission, requireWorkspacePermission } from '../http/access';
 import { authOf } from '../http/auth-middleware';
@@ -49,11 +50,17 @@ export function workspaceBoardsRouter(deps: AppDeps): Router {
       'board:create',
     );
     const input = parse(createBoardSchema, req.body);
-    const [board] = await db
-      .insert(boards)
-      .values({ ...input, workspaceId, createdBy: userId })
-      .returning();
-    res.status(201).json({ board: toBoardDto(board!) });
+    const board = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(boards)
+        .values({ ...input, workspaceId, createdBy: userId })
+        .returning();
+      // Seed the Yjs document with default columns in the same transaction.
+      // The seed is deterministic, so a collab node seeding too is harmless.
+      await initBoardDocument(tx, row!.id, createSeedUpdate(row!.id));
+      return row!;
+    });
+    res.status(201).json({ board: toBoardDto(board) });
   });
 
   return router;

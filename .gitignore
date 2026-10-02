@@ -12,3 +12,4 @@ blob-report
 .vite
 *.tsbuildinfo
 load/results/*.raw.json
+/smoke*.mjs

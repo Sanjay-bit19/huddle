@@ -4,6 +4,7 @@ import { RequireAuth } from './components/Layout';
 import { refreshSession } from './lib/api';
 import { useAuth } from './lib/auth';
 import { LoginPage, SignupPage } from './pages/AuthPages';
+import { BoardPage } from './pages/BoardPage';
 import { HomePage } from './pages/HomePage';
 import { InvitePage } from './pages/InvitePage';
 import { WorkspacePage } from './pages/WorkspacePage';
@@ -46,6 +47,7 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/w/:workspaceId" element={<WorkspacePage />} />
+        <Route path="/b/:boardId" element={<BoardPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
