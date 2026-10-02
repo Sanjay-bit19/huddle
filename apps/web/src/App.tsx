@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { RequireAuth } from './components/Layout';
+import { Spinner } from './components/ui';
 import { refreshSession } from './lib/api';
 import { useAuth } from './lib/auth';
 import { LoginPage, SignupPage } from './pages/AuthPages';
-import { BoardPage } from './pages/BoardPage';
 import { HomePage } from './pages/HomePage';
 import { InvitePage } from './pages/InvitePage';
 import { WorkspacePage } from './pages/WorkspacePage';
+
+// The board (Yjs, TipTap, dnd-kit) is most of the bundle: load it on demand.
+const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })));
 
 function AnonymousOnly({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -47,7 +50,20 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/w/:workspaceId" element={<WorkspacePage />} />
-        <Route path="/b/:boardId" element={<BoardPage />} />
+        <Route
+          path="/b/:boardId"
+          element={
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center">
+                  <Spinner label="Loading board" />
+                </div>
+              }
+            >
+              <BoardPage />
+            </Suspense>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

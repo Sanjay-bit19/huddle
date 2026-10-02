@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { can, ROLES, type Role } from '@huddle/shared';
 import { AppHeader } from '../components/Layout';
+import { SearchBox } from '../components/SearchBox';
 import { Avatar, Button, ErrorBanner, Field, Input, Modal, Spinner } from '../components/ui';
 import { useCurrentUser } from '../lib/auth';
 import {
@@ -56,6 +57,9 @@ export function WorkspacePage() {
         <span className="text-slate-300">/</span>
         <span className="truncate font-medium">{workspace.data.name}</span>
         <RoleBadge role={role} />
+        <div className="ml-auto w-72">
+          <SearchBox workspaceId={workspaceId} />
+        </div>
       </AppHeader>
       <main className="mx-auto max-w-5xl px-4 py-8">
         <div role="tablist" className="mb-6 flex gap-1 border-b border-slate-200">

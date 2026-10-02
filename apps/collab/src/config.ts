@@ -18,6 +18,14 @@ const configSchema = z.object({
   /** How long incremental updates are buffered before hitting the update log. */
   UPDATE_LOG_FLUSH_MS: z.coerce.number().int().nonnegative().default(250),
   METRICS_TOKEN: z.string().optional(),
+  /**
+   * Load-testing only: exposes POST /debug/gc (needs node --expose-gc) so a
+   * benchmark can measure heap after a full GC. Never enable in production.
+   */
+  BENCH_GC_ENDPOINT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   SENTRY_DSN: z.string().optional(),
 });
 

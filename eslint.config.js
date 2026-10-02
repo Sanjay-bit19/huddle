@@ -44,4 +44,9 @@ export default tseslint.config(
     files: ['**/scripts/**', '**/*-cli.ts', 'load/**', 'e2e/**', 'test/**'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // k6 runtime globals
+    files: ['load/ws-fanout.js'],
+    languageOptions: { globals: { open: 'readonly', __ENV: 'readonly', __VU: 'readonly' } },
+  },
 );

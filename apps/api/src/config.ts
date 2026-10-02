@@ -33,6 +33,7 @@ const configSchema = z.object({
   AI_RATE_LIMIT_ENFORCED: bool.default(false),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   METRICS_TOKEN: z.string().optional(),
+  SENTRY_DSN: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema> & { cookieSecure: boolean };

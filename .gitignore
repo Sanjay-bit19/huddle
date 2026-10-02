@@ -13,3 +13,4 @@ blob-report
 *.tsbuildinfo
 load/results/*.raw.json
 /smoke*.mjs
+load/results/target.json

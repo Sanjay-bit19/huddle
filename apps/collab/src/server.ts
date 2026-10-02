@@ -5,6 +5,7 @@ import { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import type { CollabConfig } from './config';
 import { subscribeToControlEvents } from './control-events';
+import { activityExtension } from './extensions/activity';
 import { authExtension } from './extensions/auth';
 import { guardExtension } from './extensions/guard';
 import { persistenceExtension } from './extensions/persistence';
@@ -29,6 +30,7 @@ export interface CollabServer {
 export function createCollabServer(deps: CollabServerDeps): CollabServer {
   const { config, db, logger } = deps;
   const metrics = deps.metrics ?? createCollabMetrics(config.INSTANCE_ID);
+  const activity = activityExtension({ db, logger, metrics });
   const persistence = persistenceExtension({
     db,
     logger,
@@ -52,6 +54,13 @@ export function createCollabServer(deps: CollabServerDeps): CollabServer {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ ok: true, instance: config.INSTANCE_ID }));
         throw null; // handled: stop Hocuspocus' default response
+      }
+      if (url.pathname === '/debug/gc' && config.BENCH_GC_ENDPOINT && request.method === 'POST') {
+        const gc = (globalThis as { gc?: () => void }).gc;
+        gc?.();
+        response.writeHead(gc ? 200 : 501, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify(process.memoryUsage()));
+        throw null;
       }
       if (url.pathname === '/metrics') {
         const auth = request.headers.authorization;
@@ -81,6 +90,7 @@ export function createCollabServer(deps: CollabServerDeps): CollabServer {
       authExtension({ db, jwtSecret: config.JWT_SECRET, logger, metrics }),
       guardExtension({ logger, metrics }),
       persistence,
+      activity,
       ...(deps.extensions ?? []),
     ],
   });
@@ -104,7 +114,7 @@ export function createCollabServer(deps: CollabServerDeps): CollabServer {
     },
     async stop() {
       await server.destroy();
-      await persistence.flushAll();
+      await Promise.all([persistence.flushAll(), activity.flushAll()]);
       await control.close();
     },
   };

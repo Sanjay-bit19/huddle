@@ -5,8 +5,10 @@ import { loadConfig } from './config';
 import { buildDeps } from './deps';
 import { redisEventPublisher } from './events';
 import { createLogger } from './logger';
+import { initSentry } from './observability';
 
 const config = loadConfig();
+initSentry(config.SENTRY_DSN || undefined, config.NODE_ENV, 'api');
 const logger = createLogger(config.LOG_LEVEL, config.NODE_ENV === 'development');
 const dbHandle = createDb(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 2 });

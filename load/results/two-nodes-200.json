@@ -1,0 +1,41 @@
+{
+  "label": "two-nodes-200",
+  "nodes": 2,
+  "vus": 200,
+  "writers": 5,
+  "writeHzPerWriter": 2,
+  "clientsSynced": 200,
+  "authFailures": 0,
+  "wsErrors": 0,
+  "unexpectedCloses": 0,
+  "probesSent": 294,
+  "deliveriesExpected": 58506,
+  "deliveriesReceived": 58506,
+  "dropped": 0,
+  "fanoutLatencyMs": {
+    "p50": 32,
+    "p95": 155,
+    "p99": 224,
+    "max": 473,
+    "avg": 49.96957577000649
+  },
+  "timeToSyncMs": {
+    "p50": 538,
+    "p95": 760.1999999999999,
+    "max": 782
+  },
+  "clientsSyncedAfterWritesStarted": 0,
+  "receivedPerClient": {
+    "min": 235,
+    "med": 294,
+    "max": 294
+  },
+  "memory": {
+    "connectionsAtSample": 200,
+    "rssDeltaBytes": -61902848,
+    "heapDeltaBytes": 7366884,
+    "heapMeasuredAfterFullGc": true,
+    "heapPerConnectionKiB": 36
+  },
+  "finishedAt": "2026-10-02T06:47:51.367Z"
+}

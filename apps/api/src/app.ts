@@ -4,6 +4,7 @@ import express, { type Express } from 'express';
 import { pinoHttp } from 'pino-http';
 import { aiRouter } from './ai/routes';
 import { authRouter } from './auth/routes';
+import { boardCollabRouter } from './boards/collab-routes';
 import { boardsRouter, workspaceBoardsRouter } from './boards/routes';
 import type { AppDeps } from './deps';
 import { errorHandler, notFound } from './http/errors';
@@ -56,6 +57,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/invites', invitesRouter(deps));
   app.use('/api/boards', boardsRouter(deps));
   app.use('/api', aiRouter(deps));
+  app.use('/api', boardCollabRouter(deps));
 
   app.use('/api', () => {
     throw notFound('Route not found');

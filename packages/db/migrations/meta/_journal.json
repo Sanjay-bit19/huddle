@@ -29,6 +29,13 @@
       "when": 1790920810013,
       "tag": "0003_ai_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790921575488,
+      "tag": "0004_activity_comments_search",
+      "breakpoints": true
     }
   ]
 }

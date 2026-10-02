@@ -1,9 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { can, userColor, type PresenceUser } from '@huddle/shared';
 import { AppHeader } from '../components/Layout';
+import { SearchBox } from '../components/SearchBox';
+import { ActivityList } from '../components/board/ActivityList';
 import { AiPanel } from '../components/board/AiPanel';
+import { Comments } from '../components/board/Comments';
 import { BoardCanvas } from '../components/board/BoardCanvas';
 import { CardDetail } from '../components/board/CardDetail';
 import { ConnectionStatus } from '../components/board/ConnectionStatus';
@@ -17,6 +20,7 @@ import {
   type ConnectionState,
 } from '../lib/collab';
 import { groupByCard, throttle, uniqueUsers, usePresence } from '../lib/presence';
+import { boardDataKeys } from '../lib/board-data';
 import { qk, useBoard, useMembers, type BoardDetails } from '../lib/queries';
 import { RoleBadge } from './HomePage';
 
@@ -76,8 +80,23 @@ function ConnectedBoard({
   const { doc, provider, state, onStateless } = connection;
   const view = useBoardView(doc);
   const members = useMembers(details.workspace.id);
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const [aiOpen, setAiOpen] = useState(false);
+  // The open card lives in the URL (?card=) so search results and shared links deep-link to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openCardId = searchParams.get('card');
+  const setOpenCardId = useCallback(
+    (id: string | null) =>
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id) next.set('card', id);
+          else next.delete('card');
+          return next;
+        },
+        { replace: true },
+      ),
+    [setSearchParams],
+  );
+  const [sidePanel, setSidePanel] = useState<'ai' | 'activity' | null>(null);
 
   const role = connection.liveRole ?? details.role;
   // The socket's scope is authoritative; until it arrives fall back to the role.
@@ -111,16 +130,27 @@ function ConnectedBoard({
       onStateless((msg) => {
         if (msg.kind === 'board-meta-changed' || msg.kind === 'role-changed') {
           void qc.invalidateQueries({ queryKey: qk.board(boardId) });
+        } else if (msg.kind === 'comments-changed') {
+          void qc.invalidateQueries({ queryKey: boardDataKeys.comments(boardId, msg.cardId) });
+        } else if (msg.kind === 'activity') {
+          void qc.invalidateQueries({ queryKey: boardDataKeys.activityAll(boardId) });
         }
       }),
     [onStateless, qc, boardId],
   );
 
   const openCard = openCardId ? view.cards.find((c) => c.id === openCardId) : undefined;
+  // Close the panel if the open card disappears (deleted, possibly by someone
+  // else). Only for a card we have actually shown: a deep link (?card=) may
+  // briefly point at a card the first render of the view does not have yet.
+  const shownCardRef = useRef<string | null>(null);
+  if (openCard) shownCardRef.current = openCard.id;
   useEffect(() => {
-    // Close the panel if the card was deleted (possibly by someone else).
-    if (openCardId && !openCard && state.synced) setOpenCardId(null);
-  }, [openCardId, openCard, state.synced]);
+    if (openCardId && !openCard && shownCardRef.current === openCardId) {
+      shownCardRef.current = null;
+      setOpenCardId(null);
+    }
+  }, [openCardId, openCard, setOpenCardId]);
   useEffect(() => {
     // Viewers only look; tell others "X is editing" just for writers.
     setEditingCard(openCardId && !readOnly ? openCardId : null);
@@ -164,13 +194,25 @@ function ConnectedBoard({
         <RoleBadge role={role} />
         {readOnly ? <span className="text-xs text-slate-500">View only</span> : null}
         <div className="ml-auto flex items-center gap-3">
+          <SearchBox workspaceId={details.workspace.id} />
           <PresenceAvatars users={onlineUsers} />
           <ConnectionStatus state={state} />
           <button
-            onClick={() => setAiOpen((o) => !o)}
-            aria-pressed={aiOpen}
+            onClick={() => setSidePanel((p) => (p === 'activity' ? null : 'activity'))}
+            aria-pressed={sidePanel === 'activity'}
             className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 transition ${
-              aiOpen
+              sidePanel === 'activity'
+                ? 'bg-slate-800 text-white ring-slate-800'
+                : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Activity
+          </button>
+          <button
+            onClick={() => setSidePanel((p) => (p === 'ai' ? null : 'ai'))}
+            aria-pressed={sidePanel === 'ai'}
+            className={`rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap ring-1 transition ${
+              sidePanel === 'ai'
                 ? 'bg-indigo-600 text-white ring-indigo-600'
                 : 'bg-white text-indigo-700 ring-indigo-200 hover:bg-indigo-50'
             }`}
@@ -203,7 +245,31 @@ function ConnectedBoard({
             />
           )}
         </main>
-        {aiOpen ? (
+        {sidePanel === 'activity' ? (
+          <aside
+            className="flex h-full w-[360px] shrink-0 flex-col border-l border-slate-200 bg-white"
+            aria-label="Board activity"
+          >
+            <header className="flex items-center border-b border-slate-100 px-4 py-3">
+              <h2 className="font-semibold">Activity</h2>
+              <button
+                onClick={() => setSidePanel(null)}
+                className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-100"
+                aria-label="Close activity"
+              >
+                ✕
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <ActivityList
+                boardId={details.board.id}
+                members={memberNames}
+                onOpenCard={setOpenCardId}
+              />
+            </div>
+          </aside>
+        ) : null}
+        {sidePanel === 'ai' ? (
           <AiPanel
             boardId={details.board.id}
             doc={doc}
@@ -211,7 +277,7 @@ function ConnectedBoard({
             userId={user.id}
             canWrite={!readOnly && can(role, 'ai:write')}
             onOpenCard={setOpenCardId}
-            onClose={() => setAiOpen(false)}
+            onClose={() => setSidePanel(null)}
           />
         ) : null}
       </div>
@@ -227,6 +293,26 @@ function ConnectedBoard({
           members={members.data ?? []}
           otherEditors={editorsByCard.get(openCard.id) ?? []}
           onClose={() => setOpenCardId(null)}
+          footer={
+            <>
+              <Comments
+                boardId={details.board.id}
+                cardId={openCard.id}
+                role={role}
+                userId={user.id}
+              />
+              <section>
+                <h3 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  History
+                </h3>
+                <ActivityList
+                  boardId={details.board.id}
+                  cardId={openCard.id}
+                  members={memberNames}
+                />
+              </section>
+            </>
+          }
         />
       ) : null}
     </div>

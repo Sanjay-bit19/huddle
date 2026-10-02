@@ -6,13 +6,21 @@ import type {
   onStoreDocumentPayload,
 } from '@hocuspocus/server';
 import { isTransactionOrigin } from '@hocuspocus/server';
-import { appendBoardUpdates, compactBoard, loadBoardState, type Database } from '@huddle/db';
+import {
+  appendBoardUpdates,
+  compactBoard,
+  loadBoardState,
+  syncCardSearch,
+  type CardHashes,
+  type Database,
+} from '@huddle/db';
 import { parseBoardDocumentName } from '@huddle/shared';
-import { createSeedUpdate } from '@huddle/shared/board';
+import { createSeedUpdate, readBoard } from '@huddle/shared/board';
 import type { Logger } from 'pino';
 import * as Y from 'yjs';
 import type { CollabContext } from '../context';
 import type { CollabMetrics } from '../metrics';
+import { captureError } from '../observability';
 
 interface PendingRow {
   boardId: string;
@@ -40,6 +48,9 @@ export function persistenceExtension(deps: {
   const { db, logger, metrics, flushMs } = deps;
   const pending = new Map<string, PendingRow[]>();
   const timers = new Map<string, NodeJS.Timeout>();
+  // Per board: hash of each card as last written to the search index, so a
+  // compaction only rewrites the rows that changed.
+  const searchHashes = new Map<string, CardHashes>();
 
   async function flush(boardId: string): Promise<void> {
     const timer = timers.get(boardId);
@@ -55,6 +66,7 @@ export function persistenceExtension(deps: {
       // Typically the board was deleted (FK violation). If not, the updates
       // are still in memory and will be part of the next snapshot.
       logger.error({ err, boardId, rows: rows.length }, 'failed to append update log');
+      captureError(err, { boardId, op: 'append-update-log' });
     }
   }
 
@@ -113,8 +125,15 @@ export function persistenceExtension(deps: {
         const result = await compactBoard(db, boardId, Y.encodeStateAsUpdate(document));
         metrics.snapshotBytes.observe(result.snapshotBytes);
         logger.debug({ boardId, ...result }, 'document compacted');
+        // Search is a read model of the document, refreshed on the same
+        // cadence as snapshots (so it lags edits by at most maxDebounce).
+        searchHashes.set(
+          boardId,
+          await syncCardSearch(db, boardId, readBoard(document), searchHashes.get(boardId)),
+        );
       } catch (err) {
         logger.error({ err, boardId }, 'compaction failed');
+        captureError(err, { boardId, op: 'compaction' });
         throw err;
       } finally {
         end();
@@ -123,7 +142,10 @@ export function persistenceExtension(deps: {
 
     async afterUnloadDocument({ documentName }: afterUnloadDocumentPayload) {
       const boardId = parseBoardDocumentName(documentName);
-      if (boardId) await flush(boardId);
+      if (boardId) {
+        await flush(boardId);
+        searchHashes.delete(boardId);
+      }
     },
 
     async onDestroy() {

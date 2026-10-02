@@ -1,7 +1,9 @@
+import { sql } from 'drizzle-orm';
 import { ROLES } from '@huddle/shared';
 import {
   bigserial,
   customType,
+  jsonb,
   index,
   integer,
   pgEnum,
@@ -253,4 +255,81 @@ export const aiRequests = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('ai_requests_user_idx').on(t.userId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Activity log, comments, search projection
+// ---------------------------------------------------------------------------
+
+/** Derived from Yjs transactions by the collab node that received them. */
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    type: text('type').notNull(),
+    cardId: text('card_id'),
+    data: jsonb('data').$type<Record<string, string | null>>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('activity_board_idx').on(t.boardId, t.id),
+    index('activity_card_idx').on(t.boardId, t.cardId, t.id),
+  ],
+);
+
+/**
+ * Comments live in Postgres, not in the CRDT: they are append-mostly, need a
+ * server-verified author, and are moderated (deleted) by role.
+ */
+export const comments = pgTable(
+  'comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    cardId: text('card_id').notNull(),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('comments_card_idx').on(t.boardId, t.cardId, t.createdAt)],
+);
+
+const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
+
+/**
+ * Read model of cards for full-text search, projected from each board's Yjs
+ * document when the collab server compacts it. Weighted: title > labels >
+ * description. The GIN index makes workspace-wide search a single index scan.
+ */
+export const cardSearch = pgTable(
+  'card_search',
+  {
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    cardId: text('card_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    labels: text('labels').notNull(),
+    columnTitle: text('column_title').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    document: tsvector('document').generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(labels, '')), 'B') || setweight(to_tsvector('english', coalesce(body, '')), 'C')`,
+    ),
+  },
+  (t) => [
+    primaryKey({ columns: [t.boardId, t.cardId] }),
+    index('card_search_document_idx').using('gin', t.document),
+    index('card_search_workspace_idx').on(t.workspaceId),
+  ],
 );

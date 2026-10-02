@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
+import { captureError } from '../observability';
 
 export class HttpError extends Error {
   constructor(
@@ -34,7 +35,10 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
   if (err instanceof HttpError) {
-    if (err.status >= 500) req.log.error({ err }, err.message);
+    if (err.status >= 500) {
+      req.log.error({ err }, err.message);
+      captureError(err, { requestId: req.id, path: req.path });
+    }
     res.status(err.status).json({
       error: {
         code: err.code,
@@ -51,5 +55,6 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
   req.log.error({ err }, 'unhandled error');
+  captureError(err, { requestId: req.id, path: req.path, userId: req.auth?.userId });
   res.status(500).json({ error: { code: 'internal', message: 'Something went wrong' } });
 };

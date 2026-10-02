@@ -20,7 +20,9 @@
     "db:generate": "pnpm --filter @huddle/db generate",
     "db:migrate": "pnpm --filter @huddle/db migrate",
     "db:seed": "pnpm --filter @huddle/api seed",
-    "dev:cluster": "concurrently -n api,c1,c2,lb,web \"pnpm --filter @huddle/api dev\" \"PORT=1235 INSTANCE_ID=collab-1 pnpm --filter @huddle/collab dev\" \"PORT=1236 INSTANCE_ID=collab-2 pnpm --filter @huddle/collab dev\" \"node scripts/collab-lb.mjs 1234 127.0.0.1:1235 127.0.0.1:1236\" \"pnpm --filter @huddle/web dev\""
+    "dev:cluster": "concurrently -n api,c1,c2,lb,web \"pnpm --filter @huddle/api dev\" \"PORT=1235 INSTANCE_ID=collab-1 pnpm --filter @huddle/collab dev\" \"PORT=1236 INSTANCE_ID=collab-2 pnpm --filter @huddle/collab dev\" \"node scripts/collab-lb.mjs 1234 127.0.0.1:1235 127.0.0.1:1236\" \"pnpm --filter @huddle/web dev\"",
+    "load:setup": "node load/setup.mjs",
+    "load:build": "esbuild load/ws-fanout.js --bundle --format=esm --platform=neutral --main-fields=module,main --external:k6 --external:k6/* --outfile=load/dist/ws-fanout.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -29,13 +31,17 @@
     "@playwright/test": "1.63.0",
     "@types/node": "^22.20.5",
     "concurrently": "^10.0.5",
+    "esbuild": "^0.27.0",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
+    "lib0": "^0.2.117",
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
   }
 }
