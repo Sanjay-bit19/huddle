@@ -1,0 +1,39 @@
+{
+  "name": "huddle",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r --parallel typecheck && tsc -p tsconfig.json",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "db:generate": "pnpm --filter @huddle/db generate",
+    "db:migrate": "pnpm --filter @huddle/db migrate",
+    "db:seed": "pnpm --filter @huddle/api seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@huddle/db": "workspace:*",
+    "@huddle/shared": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}

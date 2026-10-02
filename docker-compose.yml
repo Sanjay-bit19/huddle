@@ -1,0 +1,89 @@
+# Local development
+#   docker compose up -d postgres redis      # infra only, then `pnpm dev`
+#   docker compose --profile full up --build # whole stack on http://localhost:8080
+#
+# The `full` profile mirrors production topology: two collab instances behind
+# a round-robin load balancer with NO sticky sessions, kept in sync by Redis.
+
+x-node-env: &node-env
+  NODE_ENV: production
+  JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-dev-only-secret}
+  DATABASE_URL: postgres://huddle:huddle@postgres:5432/huddle
+  REDIS_URL: redis://redis:6379
+  LOG_LEVEL: info
+  COOKIE_SECURE: 'false'
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: huddle
+      POSTGRES_PASSWORD: huddle
+      POSTGRES_DB: huddle
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U huddle']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    profiles: [full]
+    build: { context: ., args: { APP: api } }
+    environment:
+      <<: *node-env
+      PORT: '4000'
+      RUN_MIGRATIONS: 'true'
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ['4000:4000']
+
+  collab-1: &collab
+    profiles: [full]
+    build: { context: ., args: { APP: collab } }
+    environment:
+      <<: *node-env
+      PORT: '1234'
+      INSTANCE_ID: collab-1
+    depends_on:
+      api: { condition: service_started }
+    ports: ['1235:1234']
+
+  collab-2:
+    <<: *collab
+    environment:
+      <<: *node-env
+      PORT: '1234'
+      INSTANCE_ID: collab-2
+    ports: ['1236:1234']
+
+  # Round-robin WebSocket load balancer in front of the collab nodes.
+  collab-lb:
+    profiles: [full]
+    image: nginx:1.27-alpine
+    volumes: ['./infra/nginx-collab.conf:/etc/nginx/conf.d/default.conf:ro']
+    depends_on: [collab-1, collab-2]
+    ports: ['1234:1234']
+
+  web:
+    profiles: [full]
+    build: { context: ., target: web }
+    depends_on: [api, collab-lb]
+    ports: ['8080:80']
+
+volumes:
+  pgdata:
