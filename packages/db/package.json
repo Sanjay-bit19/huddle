@@ -12,6 +12,7 @@
     "migrate": "tsx src/migrate-cli.ts"
   },
   "dependencies": {
+    "@huddle/shared": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "pg": "^8.23.1",
     "yjs": "^13.6.33"

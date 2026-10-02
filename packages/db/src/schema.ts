@@ -1,7 +1,11 @@
+import { ROLES } from '@huddle/shared';
 import {
   customType,
   index,
+  integer,
+  pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -82,3 +86,85 @@ export const refreshTokens = pgTable(
 export type DbUser = typeof users.$inferSelect;
 export type DbSession = typeof sessions.$inferSelect;
 export type DbRefreshToken = typeof refreshTokens.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Workspaces, membership, invites
+// ---------------------------------------------------------------------------
+
+export const workspaceRole = pgEnum('workspace_role', ROLES);
+
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+});
+
+export const workspaceMembers = pgTable(
+  'workspace_members',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: workspaceRole('role').notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.userId] }),
+    index('workspace_members_user_idx').on(t.userId),
+  ],
+);
+
+/**
+ * Invite links are bearer secrets: only the SHA-256 of the token is stored,
+ * the raw token is shown once at creation. They always expire and can be
+ * capped by use count or revoked.
+ */
+export const invites = pgTable(
+  'invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    role: workspaceRole('role').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    maxUses: integer('max_uses'),
+    useCount: integer('use_count').notNull().default(0),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('invites_token_hash_idx').on(t.tokenHash),
+    index('invites_workspace_idx').on(t.workspaceId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Boards (metadata only; columns and cards live in the board's Yjs document)
+// ---------------------------------------------------------------------------
+
+export const boards = pgTable(
+  'boards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('boards_workspace_idx').on(t.workspaceId)],
+);
+
+export type DbWorkspace = typeof workspaces.$inferSelect;
+export type DbInvite = typeof invites.$inferSelect;
+export type DbBoard = typeof boards.$inferSelect;

@@ -15,18 +15,16 @@ const variants: Record<Variant, string> = {
   danger: 'bg-rose-600 text-white hover:bg-rose-500 disabled:bg-rose-300',
 };
 
+export function buttonClass(variant: Variant = 'primary', size: 'sm' | 'md' = 'md', extra = '') {
+  const sizing = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm';
+  return `inline-flex items-center justify-center gap-1.5 rounded-md font-medium shadow-xs transition-colors disabled:cursor-not-allowed ${sizing} ${variants[variant]} ${extra}`;
+}
+
 export const Button = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' }
 >(function Button({ variant = 'primary', size = 'md', className = '', ...props }, ref) {
-  const sizing = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm';
-  return (
-    <button
-      ref={ref}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-md font-medium shadow-xs transition-colors disabled:cursor-not-allowed ${sizing} ${variants[variant]} ${className}`}
-      {...props}
-    />
-  );
+  return <button ref={ref} className={buttonClass(variant, size, className)} {...props} />;
 });
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(

@@ -3,8 +3,11 @@ import cookieParser from 'cookie-parser';
 import express, { type Express } from 'express';
 import { pinoHttp } from 'pino-http';
 import { authRouter } from './auth/routes';
+import { boardsRouter, workspaceBoardsRouter } from './boards/routes';
 import type { AppDeps } from './deps';
 import { errorHandler, notFound } from './http/errors';
+import { invitesRouter } from './invites/routes';
+import { workspacesRouter } from './workspaces/routes';
 
 export function createApp(deps: AppDeps): Express {
   const app = express();
@@ -35,6 +38,10 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/api/auth', authRouter(deps));
+  app.use('/api/workspaces/:workspaceId/boards', workspaceBoardsRouter(deps));
+  app.use('/api/workspaces', workspacesRouter(deps));
+  app.use('/api/invites', invitesRouter(deps));
+  app.use('/api/boards', boardsRouter(deps));
 
   app.use('/api', () => {
     throw notFound('Route not found');

@@ -89,3 +89,27 @@ export function cookieValue(
   }
   return undefined;
 }
+
+export interface TestUser {
+  id: string;
+  email: string;
+  name: string;
+  token: string;
+  auth: { Authorization: string };
+}
+
+export async function createUser(ctx: TestContext, name = 'User'): Promise<TestUser> {
+  const { default: request } = await import('supertest');
+  const email = uniqueEmail(name.toLowerCase().replace(/\s+/g, '-'));
+  const res = await request(ctx.app)
+    .post('/api/auth/signup')
+    .send({ email, name, password: 'password-1234' })
+    .expect(201);
+  return {
+    id: res.body.user.id,
+    email,
+    name,
+    token: res.body.accessToken,
+    auth: { Authorization: `Bearer ${res.body.accessToken}` },
+  };
+}
