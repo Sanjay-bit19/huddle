@@ -307,7 +307,8 @@ export class AiService {
   // -------------------------------------------------------------------------
 
   private async loadBoard(board: BoardRef) {
-    // Snapshot + pending update log: what clients have seen within ~250ms.
+    // Snapshot + pending update log: lags live edits by milliseconds when the
+    // board is quiet, by at most one ~250ms batching window during bursts.
     const doc = await loadBoardDoc(this.deps.db, board.boardId);
     const view = readBoard(doc);
     doc.destroy();

@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { aiRequests, aiUsage, appendBoardUpdates, loadBoardDoc } from '@huddle/db';
+import { aiStreamEventSchema } from '@huddle/shared';
 import { addCard, readBoard } from '@huddle/shared/board';
 import { createTestContext, createUser, type TestContext, type TestUser } from './helpers';
 
@@ -88,7 +89,10 @@ async function sse(c: TestContext, path: string, user: TestUser, body: object = 
         .filter((b) => b.startsWith('event:'))
         .map((block) => {
           const [e, d] = block.split('\n');
-          return { event: e!.slice(7), data: JSON.parse(d!.slice(6)) };
+          const event = { event: e!.slice(7), data: JSON.parse(d!.slice(6)) as unknown };
+          // Every event must satisfy the schema the browser validates with.
+          expect(aiStreamEventSchema.safeParse(event).success, JSON.stringify(event)).toBe(true);
+          return event;
         })
     : [];
   const text = events

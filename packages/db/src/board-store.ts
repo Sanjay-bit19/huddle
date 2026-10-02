@@ -6,7 +6,8 @@ import { boardDocuments, boardUpdates } from './schema';
 /**
  * Board document persistence: snapshot + append-only update log.
  *
- *   write path:  every client update -> boardUpdates (batched, ~250ms)
+ *   write path:  every client update -> boardUpdates (immediately when quiet,
+ *                batched per ~250ms window during bursts)
  *   compaction:  debounced -> fold snapshot + log (+ in-memory doc) into a
  *                new snapshot, delete exactly the log rows that were folded
  *   load path:   snapshot + all remaining log rows

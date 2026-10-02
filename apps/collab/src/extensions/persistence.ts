@@ -31,8 +31,9 @@ interface PendingRow {
 /**
  * Two-tier persistence (see packages/db/src/board-store.ts):
  *
- * 1. Every update a client sends to THIS node is appended to the update log
- *    within UPDATE_LOG_FLUSH_MS. Updates relayed from other nodes via Redis
+ * 1. Every update a client sends to THIS node is appended to the update log:
+ *    immediately after a quiet period, batched per UPDATE_LOG_FLUSH_MS window
+ *    during bursts. Updates relayed from other nodes via Redis
  *    are skipped: the node that received them from the client logs them.
  * 2. Hocuspocus calls onStoreDocument debounced (2s, max 10s), and we fold the
  *    log plus the in-memory doc into a compacted snapshot. With the Redis
@@ -52,10 +53,35 @@ export function persistenceExtension(deps: {
   // compaction only rewrites the rows that changed.
   const searchHashes = new Map<string, CardHashes>();
 
+  /** Writes the board's buffered rows now and ends its batching window. */
   async function flush(boardId: string): Promise<void> {
     const timer = timers.get(boardId);
     if (timer) clearTimeout(timer);
     timers.delete(boardId);
+    await write(boardId);
+  }
+
+  /**
+   * Throttle with a leading edge: the first update after a quiet period is
+   * written immediately, so readers of the log (the API's AI grounding) see a
+   * lone edit within milliseconds. Updates arriving during the following
+   * flushMs window are batched into one insert at its end, and the window
+   * stays open while updates keep coming (one insert per window under load).
+   */
+  function openWindow(boardId: string) {
+    timers.set(
+      boardId,
+      setTimeout(() => {
+        timers.delete(boardId);
+        if (pending.get(boardId)?.length) {
+          openWindow(boardId);
+          void write(boardId);
+        }
+      }, flushMs),
+    );
+  }
+
+  async function write(boardId: string): Promise<void> {
     const rows = pending.get(boardId);
     if (!rows?.length) return;
     pending.delete(boardId);
@@ -109,10 +135,8 @@ export function persistenceExtension(deps: {
       if (flushMs === 0) {
         await flush(boardId);
       } else if (!timers.has(boardId)) {
-        timers.set(
-          boardId,
-          setTimeout(() => void flush(boardId), flushMs),
-        );
+        openWindow(boardId);
+        void write(boardId);
       }
     },
 

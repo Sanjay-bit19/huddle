@@ -126,8 +126,8 @@ describe('cross-instance sync via Redis', () => {
   });
 
   it('a late joiner on another node gets unpersisted state from its peer via Redis', async () => {
-    // Nothing reaches Postgres during this test: the only way node B can know
-    // about the card is Redis' initial state exchange with node A.
+    // The second card never reaches Postgres during this test: the only way
+    // node B can know about it is Redis' initial state exchange with node A.
     const [nodeA, nodeB] = await twoNodes({
       UPDATE_LOG_FLUSH_MS: '60000',
       STORE_DEBOUNCE_MS: '60000',
@@ -138,13 +138,20 @@ describe('cross-instance sync via Redis', () => {
     const bob = await fx.member('EDITOR', 'bob');
     const onA = track(connect(nodeA.url, fx.boardId, ada.token));
     await onA.synced;
-    addCard(onA.doc, { columnId: readBoard(onA.doc).columns[0]!.id, title: 'in memory only' });
+    const columnId = readBoard(onA.doc).columns[0]!.id;
+    // Leading edge: the first edit after a quiet period is logged at once...
+    addCard(onA.doc, { columnId, title: 'logged' });
+    await waitFor(async () => (await handle.db.select().from(boardUpdates)).length === 1, {
+      message: 'first edit logged immediately',
+    });
+    // ...the next one waits for the end of the (60s) batching window.
+    addCard(onA.doc, { columnId, title: 'in memory only' });
     await sleep(100);
-    expect(await handle.db.select().from(boardUpdates)).toHaveLength(0);
+    expect(await handle.db.select().from(boardUpdates)).toHaveLength(1);
 
     const onB = track(connect(nodeB.url, fx.boardId, bob.token));
     await onB.synced;
-    await waitFor(() => readBoard(onB.doc).cards[0]?.title === 'in memory only', {
+    await waitFor(() => readBoard(onB.doc).cards.some((c) => c.title === 'in memory only'), {
       message: 'late joiner sees peer state',
     });
   });

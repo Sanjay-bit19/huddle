@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import type { AiStatus, AiStreamEvent, NotesToCardsResponse } from '@huddle/shared';
+import {
+  aiStreamEventSchema,
+  type AiStatus,
+  type AiStreamEvent,
+  type NotesToCardsResponse,
+} from '@huddle/shared';
 import { api, apiResponse } from './api';
 
 export const aiStatusKey = ['ai', 'status'] as const;
@@ -43,7 +48,9 @@ export async function streamAi(
         else if (line.startsWith('data: ')) data += line.slice(6);
       }
       if (!data) continue; // comments / keep-alives
-      onEvent({ event, data: JSON.parse(data) } as AiStreamEvent);
+      const parsed = aiStreamEventSchema.safeParse({ event, data: JSON.parse(data) });
+      if (!parsed.success) throw new Error(`Unexpected AI stream event "${event}"`);
+      onEvent(parsed.data);
     }
   }
 }

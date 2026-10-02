@@ -45,6 +45,8 @@ test('AI: notes become reviewed cards; summary streams with clickable citations'
   await panel.getByRole('button', { name: 'Summarize this board' }).click();
   const output = panel.getByTestId('ai-summary-output');
   await expect(output).toContainText('Blockers');
+  // The card added a moment ago is already grounded (leading-edge log write).
+  await expect(output).toContainText('3 cards');
   await expect(output.getByTestId('citation').first()).toBeVisible();
   await snap(page, 'ai-summary');
   await output.getByTestId('citation').first().click();

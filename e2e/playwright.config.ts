@@ -1,9 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * E2E runs the real stack: API + collab server (tsx) + Vite, against the
- * Postgres/Redis in DATABASE_URL / REDIS_URL. Locally, already-running dev
- * servers are reused.
+ * E2E runs the real stack against the Postgres/Redis in DATABASE_URL /
+ * REDIS_URL: API, TWO collab nodes behind a round-robin TCP balancer (no
+ * sticky sessions, like production) and Vite. Consecutive browser contexts
+ * land on different nodes, so the collaboration specs exercise Redis fan-out.
+ * Locally, already-running dev servers (`pnpm dev:cluster`) are reused.
  */
 const env = {
   NODE_ENV: 'test',
@@ -43,12 +45,18 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
-    {
+    ...[1235, 1236].map((port) => ({
       command: 'pnpm --filter @huddle/collab exec tsx src/index.ts',
-      url: 'http://localhost:1234/healthz',
-      env: { ...env, PORT: '1234' },
+      url: `http://localhost:${port}/healthz`,
+      env: { ...env, PORT: String(port), INSTANCE_ID: `e2e-${port}` },
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+    })),
+    {
+      command: 'node ../scripts/collab-lb.mjs 1234 127.0.0.1:1235 127.0.0.1:1236',
+      url: 'http://localhost:1234/healthz',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
     },
     {
       command: 'pnpm --filter @huddle/web exec vite --port 5173 --strictPort',

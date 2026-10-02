@@ -32,7 +32,8 @@ const configSchema = z.object({
 export type CollabConfig = z.infer<typeof configSchema>;
 
 export function loadCollabConfig(env: NodeJS.ProcessEnv = process.env): CollabConfig {
-  const parsed = configSchema.safeParse(env);
+  // On Fly.io the machine id is a stable, meaningful instance id.
+  const parsed = configSchema.safeParse({ INSTANCE_ID: env.FLY_MACHINE_ID, ...env });
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid collab configuration:\n${issues}`);

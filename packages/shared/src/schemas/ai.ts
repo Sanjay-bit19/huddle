@@ -92,23 +92,40 @@ export interface AiStatus {
   budget: { used: number; reserved: number; limit: number; period: string; resetsAt: string };
 }
 
-export interface Citation {
-  ref: string;
-  cardId: string;
-  title: string;
-}
+export const citationSchema = z.object({
+  ref: z.string(),
+  cardId: z.string(),
+  title: z.string(),
+});
+export type Citation = z.infer<typeof citationSchema>;
 
-/** Server-Sent Events emitted by the streaming AI endpoints. */
-export type AiStreamEvent =
-  | { event: 'meta'; data: { provider: string; model: string; cards: number } }
-  | { event: 'delta'; data: { text: string } }
-  | { event: 'citations'; data: { citations: Citation[]; invalid: string[] } }
-  | { event: 'refusal'; data: { message: string } }
-  | {
-      event: 'done';
-      data: { usage: { inputTokens: number; outputTokens: number }; truncated: boolean };
-    }
-  | { event: 'error'; data: { code: string; message: string } };
+const usageSchema = z.object({ inputTokens: z.number(), outputTokens: z.number() });
+
+/**
+ * Server-Sent Events emitted by the streaming AI endpoints. The server builds
+ * them with this type and the browser validates each one with this schema.
+ */
+export const aiStreamEventSchema = z.discriminatedUnion('event', [
+  z.object({
+    event: z.literal('meta'),
+    data: z.object({ provider: z.string(), model: z.string(), cards: z.number() }),
+  }),
+  z.object({ event: z.literal('delta'), data: z.object({ text: z.string() }) }),
+  z.object({
+    event: z.literal('citations'),
+    data: z.object({ citations: z.array(citationSchema), invalid: z.array(z.string()) }),
+  }),
+  z.object({ event: z.literal('refusal'), data: z.object({ message: z.string() }) }),
+  z.object({
+    event: z.literal('done'),
+    data: z.object({ usage: usageSchema, truncated: z.boolean() }),
+  }),
+  z.object({
+    event: z.literal('error'),
+    data: z.object({ code: z.string(), message: z.string() }),
+  }),
+]);
+export type AiStreamEvent = z.infer<typeof aiStreamEventSchema>;
 
 /** Card references the model uses to cite cards: [C1], [C12]... */
 export const CITATION_PATTERN = /\[(C\d{1,4})\]/g;

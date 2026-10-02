@@ -1,0 +1,49 @@
+# REST + AI API on Fly.io. Deploy from the repository root:
+#   fly deploy --config deploy/fly.api.toml --dockerfile Dockerfile
+# Secrets (never in this file):
+#   fly secrets set --config deploy/fly.api.toml JWT_SECRET=... DATABASE_URL=... \
+#     REDIS_URL=... METRICS_TOKEN=... [ANTHROPIC_API_KEY=... AI_PROVIDER=anthropic] [SENTRY_DSN=...]
+app = "huddle-api"
+primary_region = "iad"
+
+[build.args]
+  APP = "api"
+
+# Runs once per release in a throwaway machine, before new API machines start,
+# so N instances never race each other on migrations.
+[deploy]
+  release_command = "node dist/scripts/migrate.js"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4000"
+  LOG_LEVEL = "info"
+  # Browser -> Vercel edge (rewrite) -> Fly proxy -> app: two proxies, so
+  # req.ip (used by the rate limiters) is the real client address.
+  TRUST_PROXY = "2"
+  APP_URL = "https://huddle.vercel.app"
+  AI_PROVIDER = "mock"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    timeout = "2s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
