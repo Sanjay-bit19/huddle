@@ -86,6 +86,12 @@ export async function boardState(page: Page): Promise<Record<string, string[]>> 
   );
 }
 
+/** True when both pages render exactly the same board. */
+export async function converged(a: Page, b: Page): Promise<boolean> {
+  const [x, y] = await Promise.all([boardState(a), boardState(b)]);
+  return JSON.stringify(x) === JSON.stringify(y);
+}
+
 export async function dragCard(page: Page, cardTitle: string, toColumn: string) {
   const card = page.getByRole('button', { name: new RegExp(`^Card: ${cardTitle}\\.`) });
   const target = column(page, toColumn);

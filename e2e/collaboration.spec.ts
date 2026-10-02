@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   addCard,
   boardState,
+  converged,
   column,
   createBoard,
   createInvite,
@@ -45,9 +46,8 @@ test('two people editing the same board concurrently converge to the same state'
     dragCard(bob.page, 'Bob 1', 'Done'),
   ]);
 
-  await expect
-    .poll(async () => JSON.stringify(await boardState(ada.page)), { timeout: 10_000 })
-    .toBe(JSON.stringify(await boardState(bob.page)));
+  // Both sides are re-read on every poll until they agree.
+  await expect.poll(async () => converged(ada.page, bob.page), { timeout: 10_000 }).toBe(true);
   const final = await boardState(ada.page);
   expect(final['To do']).toEqual(['Ada 2']);
   expect([...final['In progress']!].sort()).toEqual(['Ada 1', 'Bob 2']);
@@ -103,7 +103,9 @@ test('presence: live cursors, editing indicators and merged concurrent typing', 
       // Caret widgets also inject U+2060 word joiners around themselves.
       return clone.innerText.replace(/\u2060/g, '').trim();
     });
-  await expect.poll(() => docText(adaEditor)).toBe(await docText(bobEditor));
+  await expect
+    .poll(async () => (await docText(adaEditor)) === (await docText(bobEditor)))
+    .toBe(true);
   await snap(bob.page, 'concurrent-description-typing');
   const text = await docText(adaEditor);
   // One paragraph: both people typed into the same line.

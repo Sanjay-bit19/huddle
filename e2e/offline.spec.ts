@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   addCard,
   boardState,
+  converged,
   column,
   createBoard,
   createInvite,
@@ -47,9 +48,8 @@ test('edits made offline sync and merge on reconnect', async ({ browser }) => {
       timeout: 20_000,
     },
   );
-  await expect
-    .poll(async () => JSON.stringify(await boardState(ada.page)), { timeout: 15_000 })
-    .toBe(JSON.stringify(await boardState(bob.page)));
+  // Both sides are re-read on every poll until they agree.
+  await expect.poll(async () => converged(ada.page, bob.page), { timeout: 15_000 }).toBe(true);
   expect(await boardState(ada.page)).toEqual({
     'To do': ['Written online'],
     'In progress': ['Written offline'],

@@ -19,7 +19,8 @@
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "db:generate": "pnpm --filter @huddle/db generate",
     "db:migrate": "pnpm --filter @huddle/db migrate",
-    "db:seed": "pnpm --filter @huddle/api seed"
+    "db:seed": "pnpm --filter @huddle/api seed",
+    "dev:cluster": "concurrently -n api,c1,c2,lb,web \"pnpm --filter @huddle/api dev\" \"PORT=1235 INSTANCE_ID=collab-1 pnpm --filter @huddle/collab dev\" \"PORT=1236 INSTANCE_ID=collab-2 pnpm --filter @huddle/collab dev\" \"node scripts/collab-lb.mjs 1234 127.0.0.1:1235 127.0.0.1:1236\" \"pnpm --filter @huddle/web dev\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -27,6 +28,7 @@
     "@huddle/shared": "workspace:*",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.20.5",
+    "concurrently": "^10.0.5",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
