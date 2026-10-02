@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { can, userColor, type PresenceUser } from '@huddle/shared';
 import { AppHeader } from '../components/Layout';
+import { AiPanel } from '../components/board/AiPanel';
 import { BoardCanvas } from '../components/board/BoardCanvas';
 import { CardDetail } from '../components/board/CardDetail';
 import { ConnectionStatus } from '../components/board/ConnectionStatus';
@@ -76,6 +77,7 @@ function ConnectedBoard({
   const view = useBoardView(doc);
   const members = useMembers(details.workspace.id);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const role = connection.liveRole ?? details.role;
   // The socket's scope is authoritative; until it arrives fall back to the role.
@@ -164,31 +166,55 @@ function ConnectedBoard({
         <div className="ml-auto flex items-center gap-3">
           <PresenceAvatars users={onlineUsers} />
           <ConnectionStatus state={state} />
+          <button
+            onClick={() => setAiOpen((o) => !o)}
+            aria-pressed={aiOpen}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 transition ${
+              aiOpen
+                ? 'bg-indigo-600 text-white ring-indigo-600'
+                : 'bg-white text-indigo-700 ring-indigo-200 hover:bg-indigo-50'
+            }`}
+          >
+            ✨ AI assist
+          </button>
         </div>
       </AppHeader>
       <OfflineBanner state={state} />
 
-      <main className="min-h-0 flex-1">
-        {!ready ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner label="Syncing board" />
-          </div>
-        ) : (
-          <BoardCanvas
+      <div className="flex min-h-0 flex-1">
+        <main className="min-h-0 min-w-0 flex-1">
+          {!ready ? (
+            <div className="flex h-full items-center justify-center">
+              <Spinner label="Syncing board" />
+            </div>
+          ) : (
+            <BoardCanvas
+              doc={doc}
+              view={view}
+              readOnly={readOnly}
+              userId={user.id}
+              members={memberNames}
+              editorsByCard={editorsByCard}
+              moversByCard={moversByCard}
+              onOpenCard={setOpenCardId}
+              onDragCard={setDraggingCard}
+              onPointer={onPointer}
+              overlay={<LiveCursors peers={presence.peers} />}
+            />
+          )}
+        </main>
+        {aiOpen ? (
+          <AiPanel
+            boardId={details.board.id}
             doc={doc}
-            view={view}
-            readOnly={readOnly}
+            columns={view.columns}
             userId={user.id}
-            members={memberNames}
-            editorsByCard={editorsByCard}
-            moversByCard={moversByCard}
+            canWrite={!readOnly && can(role, 'ai:write')}
             onOpenCard={setOpenCardId}
-            onDragCard={setDraggingCard}
-            onPointer={onPointer}
-            overlay={<LiveCursors peers={presence.peers} />}
+            onClose={() => setAiOpen(false)}
           />
-        )}
-      </main>
+        ) : null}
+      </div>
 
       {openCard ? (
         <CardDetail

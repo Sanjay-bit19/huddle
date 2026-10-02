@@ -22,6 +22,17 @@ const configSchema = z.object({
   APP_URL: z.string().default('http://localhost:5173'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   RUN_MIGRATIONS: bool.default(false),
+  AI_PROVIDER: z.enum(['mock', 'anthropic']).default('mock'),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default('claude-opus-5-5'),
+  /** Server-side refusal fallback (Claude API only). */
+  AI_FALLBACKS: bool.default(true),
+  AI_MONTHLY_TOKEN_BUDGET: z.coerce.number().int().positive().default(200_000),
+  AI_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  /** Keep the AI limiter on even when RATE_LIMIT_DISABLED is set (tests). */
+  AI_RATE_LIMIT_ENFORCED: bool.default(false),
+  AI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  METRICS_TOKEN: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema> & { cookieSecure: boolean };
@@ -33,5 +44,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Invalid API configuration:\n${issues}`);
   }
   const c = parsed.data;
+  if (c.AI_PROVIDER === 'anthropic' && !c.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+    throw new Error('AI_PROVIDER=anthropic requires ANTHROPIC_API_KEY (or use AI_PROVIDER=mock)');
+  }
   return { ...c, cookieSecure: c.COOKIE_SECURE ?? c.NODE_ENV === 'production' };
 }

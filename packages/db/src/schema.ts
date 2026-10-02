@@ -208,3 +208,49 @@ export const boardUpdates = pgTable(
   },
   (t) => [index('board_updates_board_idx').on(t.boardId, t.id)],
 );
+
+// ---------------------------------------------------------------------------
+// AI usage accounting
+// ---------------------------------------------------------------------------
+
+/**
+ * Monthly token budget per user. `tokens_reserved` holds in-flight requests'
+ * worst-case cost (prompt estimate + max_tokens), so concurrent requests
+ * cannot jointly overspend; on completion the reservation is released and the
+ * actual usage reported by the provider is added to `tokens_used`.
+ */
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** UTC month, 'YYYY-MM'. */
+    period: text('period').notNull(),
+    tokensUsed: integer('tokens_used').notNull().default(0),
+    tokensReserved: integer('tokens_reserved').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.period] })],
+);
+
+/** One row per AI call: latency, tokens and outcome, for metrics and audits. */
+export const aiRequests = pgTable(
+  'ai_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    boardId: uuid('board_id').references(() => boards.id, { onDelete: 'set null' }),
+    feature: text('feature', { enum: ['notes_to_cards', 'summary', 'ask'] }).notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull().default(1),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    latencyMs: integer('latency_ms').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_requests_user_idx').on(t.userId, t.createdAt)],
+);
