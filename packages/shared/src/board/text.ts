@@ -42,7 +42,12 @@ export function setFragmentText(fragment: Y.XmlFragment, text: string): void {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const paragraphs = lines.map((line) => {
     const p = new Y.XmlElement('paragraph');
-    if (line.length > 0) p.insert(0, [new Y.XmlText(line)]);
+    // Always give the paragraph a text node, even when empty. Otherwise two
+    // people typing into the same empty paragraph each create a sibling
+    // Y.XmlText; ProseMirror merges adjacent text into one node and
+    // y-prosemirror's re-diff then duplicates a character. With one shared
+    // Y.XmlText, concurrent keystrokes interleave character by character.
+    p.insert(0, [new Y.XmlText(line)]);
     return p;
   });
   fragment.insert(0, paragraphs);

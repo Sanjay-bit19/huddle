@@ -20,6 +20,12 @@ let accessToken: string | null = null;
 let accessTokenExpiresAt = 0;
 let refreshInFlight: Promise<string | null> | null = null;
 const listeners = new Set<() => void>();
+const logoutHooks = new Set<() => void | Promise<void>>();
+
+/** Registers cleanup to run whenever the session ends (logout, revocation, other tab). */
+export function onLoggedOut(hook: () => void | Promise<void>) {
+  logoutHooks.add(hook);
+}
 const channel =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('huddle-auth') : null;
 
@@ -51,6 +57,7 @@ export function setSession(session: AuthResponse | null, broadcast = true) {
     accessToken = null;
     accessTokenExpiresAt = 0;
     state = { status: 'anonymous', user: null };
+    if (wasAuthed) logoutHooks.forEach((h) => void h());
     if (broadcast && wasAuthed) channel?.postMessage({ type: 'logout' });
   }
   emit();

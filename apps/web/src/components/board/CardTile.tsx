@@ -29,22 +29,26 @@ export const CardFace = memo(function CardFace({
   card,
   members,
   editors,
+  movers,
   highlighted,
 }: {
   card: CardView;
   members: Map<string, string>;
   editors?: PresenceUser[];
+  movers?: PresenceUser[];
   highlighted?: boolean;
 }) {
   const done = card.checklist.filter((i) => i.done).length;
   const due = dueStatus(card.dueDate);
   const editing = editors ?? [];
+  const moving = movers ?? [];
+  const accent = moving[0] ?? editing[0];
   return (
     <div
       className={`relative rounded-lg bg-white p-3 text-left shadow-xs ring-1 transition ${
         highlighted ? 'ring-2 ring-indigo-500' : 'ring-slate-200 hover:ring-slate-300'
-      }`}
-      style={editing[0] ? { boxShadow: `0 0 0 2px ${editing[0].color}` } : undefined}
+      } ${moving.length > 0 ? 'opacity-60' : ''}`}
+      style={accent ? { boxShadow: `0 0 0 2px ${accent.color}` } : undefined}
     >
       {card.labels.length > 0 ? (
         <div className="mb-1.5 flex flex-wrap gap-1">
@@ -80,13 +84,15 @@ export const CardFace = memo(function CardFace({
           </span>
         </div>
       ) : null}
-      {editing.length > 0 ? (
+      {moving.length > 0 || editing.length > 0 ? (
         <div
           className="absolute -top-2.5 right-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
-          style={{ background: editing[0]!.color }}
+          style={{ background: accent!.color }}
           data-testid="editing-indicator"
         >
-          {editing.map((u) => u.name.split(' ')[0]).join(', ')} editing
+          {moving.length > 0
+            ? `${moving.map((u) => u.name.split(' ')[0]).join(', ')} moving`
+            : `${editing.map((u) => u.name.split(' ')[0]).join(', ')} editing`}
         </div>
       ) : null}
     </div>
@@ -97,12 +103,14 @@ export function SortableCard({
   card,
   members,
   editors,
+  movers,
   disabled,
   onOpen,
 }: {
   card: CardView;
   members: Map<string, string>;
   editors?: PresenceUser[];
+  movers?: PresenceUser[];
   disabled: boolean;
   onOpen: (id: string) => void;
 }) {
@@ -135,7 +143,7 @@ export function SortableCard({
         }}
         className="cursor-grab rounded-lg focus-visible:outline-2 focus-visible:outline-indigo-500 active:cursor-grabbing"
       >
-        <CardFace card={card} members={members} editors={editors} />
+        <CardFace card={card} members={members} editors={editors} movers={movers} />
       </div>
     </li>
   );

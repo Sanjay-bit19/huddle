@@ -17,3 +17,36 @@ body {
 :focus-visible {
   @apply outline-2 outline-offset-2 outline-indigo-500;
 }
+
+/* Remote text carets inside card descriptions (TipTap CollaborationCaret). */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.45em;
+  left: -1px;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--color-slate-400);
+  pointer-events: none;
+}

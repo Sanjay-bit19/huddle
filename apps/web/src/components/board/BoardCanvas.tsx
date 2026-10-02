@@ -113,8 +113,10 @@ export function BoardCanvas({
   userId,
   members,
   editorsByCard,
+  moversByCard,
   onOpenCard,
   onDragCard,
+  onPointer,
   overlay,
 }: {
   doc: Y.Doc;
@@ -123,8 +125,11 @@ export function BoardCanvas({
   userId: string;
   members: Map<string, string>;
   editorsByCard: Map<string, PresenceUser[]>;
+  moversByCard?: Map<string, PresenceUser[]>;
   onOpenCard: (cardId: string) => void;
   onDragCard?: (cardId: string | null) => void;
+  /** Pointer position in scroll-content coordinates, null when it leaves. */
+  onPointer?: (p: { x: number; y: number } | null) => void;
   overlay?: ReactNode;
 }) {
   const sensors = useSensors(
@@ -271,7 +276,20 @@ export function BoardCanvas({
         },
       }}
     >
-      <div className="relative flex h-full items-start gap-4 overflow-x-auto p-4" data-board-scroll>
+      <div
+        className="relative flex h-full items-start gap-4 overflow-x-auto p-4"
+        data-board-scroll
+        onPointerMove={(e) => {
+          if (!onPointer) return;
+          const el = e.currentTarget;
+          const rect = el.getBoundingClientRect();
+          onPointer({
+            x: Math.round(e.clientX - rect.left + el.scrollLeft),
+            y: Math.round(e.clientY - rect.top + el.scrollTop),
+          });
+        }}
+        onPointerLeave={() => onPointer?.(null)}
+      >
         <SortableContext
           items={view.columns.map((c) => colKey(c.id))}
           strategy={horizontalListSortingStrategy}
@@ -298,6 +316,7 @@ export function BoardCanvas({
                         card={card}
                         members={members}
                         editors={editorsByCard.get(id)}
+                        movers={moversByCard?.get(id)}
                         disabled={readOnly}
                         onOpen={onOpenCard}
                       />
@@ -365,7 +384,7 @@ function SortableColumn({
       data-testid="column"
       data-column-title={column.title}
     >
-      <header className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <header className="flex items-center gap-2 px-3 pt-3 pb-0.5">
         {!readOnly ? (
           <button
             {...attributes}
@@ -417,7 +436,8 @@ function SortableColumn({
           </button>
         ) : null}
       </header>
-      <div className="flex-1 overflow-y-auto px-3 pb-3">{children}</div>
+      {/* pt-2 leaves room for the "X editing" badge that sits above a card. */}
+      <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3">{children}</div>
     </section>
   );
 }

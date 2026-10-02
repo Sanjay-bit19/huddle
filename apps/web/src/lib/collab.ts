@@ -14,7 +14,7 @@ import {
   type Role,
 } from '@huddle/shared';
 import { readBoard, type BoardView } from '@huddle/shared/board';
-import { getAccessToken, refreshSession, setSession } from './api';
+import { getAccessToken, onLoggedOut, refreshSession, setSession } from './api';
 
 export function collabUrl(): string {
   const configured = import.meta.env.VITE_COLLAB_URL as string | undefined;
@@ -80,6 +80,9 @@ export async function clearOfflineData(): Promise<void> {
       ),
   );
 }
+
+// Locally cached boards are private data: drop them when the session ends.
+onLoggedOut(clearOfflineData);
 
 /**
  * Owns one board's Y.Doc for the lifetime of the page:

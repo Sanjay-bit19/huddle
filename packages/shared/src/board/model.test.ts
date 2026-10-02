@@ -123,6 +123,21 @@ describe('cards', () => {
     expect(titles(doc, 0)).toEqual(['D', 'B', 'C', 'A']);
   });
 
+  it('starts every description with one paragraph holding one (empty) text node', () => {
+    // Regression: with no text node, two people typing into the empty
+    // paragraph each created a sibling Y.XmlText and y-prosemirror duplicated
+    // a character when merging them (caught by the e2e typing test).
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, createSeedUpdate('b'));
+    const id = addCard(doc, { columnId: readBoard(doc).columns[0]!.id, title: 'x' });
+    const frag = cardDescription(doc, id)!;
+    expect(frag.length).toBe(1);
+    const paragraph = frag.get(0) as Y.XmlElement;
+    expect(paragraph.nodeName).toBe('paragraph');
+    expect(paragraph.length).toBe(1);
+    expect(paragraph.get(0)).toBeInstanceOf(Y.XmlText);
+  });
+
   it('stores descriptions as rich text and extracts plain text', () => {
     const doc = new Y.Doc();
     Y.applyUpdate(doc, createSeedUpdate('b'));

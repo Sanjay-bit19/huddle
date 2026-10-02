@@ -6,9 +6,16 @@ import { AppHeader } from '../components/Layout';
 import { BoardCanvas } from '../components/board/BoardCanvas';
 import { CardDetail } from '../components/board/CardDetail';
 import { ConnectionStatus } from '../components/board/ConnectionStatus';
+import { LiveCursors, PresenceAvatars } from '../components/board/Presence';
 import { ErrorBanner, Spinner } from '../components/ui';
 import { useCurrentUser } from '../lib/auth';
-import { useBoardConnection, useBoardView, type BoardConnection } from '../lib/collab';
+import {
+  useBoardConnection,
+  useBoardView,
+  type BoardConnection,
+  type ConnectionState,
+} from '../lib/collab';
+import { groupByCard, throttle, uniqueUsers, usePresence } from '../lib/presence';
 import { qk, useBoard, useMembers, type BoardDetails } from '../lib/queries';
 import { RoleBadge } from './HomePage';
 
@@ -83,6 +90,19 @@ function ConnectedBoard({
     [members.data],
   );
 
+  const presence = usePresence(provider, me);
+  const { setEditingCard, setDraggingCard, setPointer } = presence;
+  const onPointer = useMemo(() => throttle(setPointer, 40), [setPointer]);
+  const editorsByCard = useMemo(
+    () => groupByCard(presence.peers, 'editingCardId', user.id),
+    [presence.peers, user.id],
+  );
+  const moversByCard = useMemo(
+    () => groupByCard(presence.peers, 'draggingCardId', user.id),
+    [presence.peers, user.id],
+  );
+  const onlineUsers = useMemo(() => uniqueUsers(presence.peers, me), [presence.peers, me]);
+
   const boardId = details.board.id;
   useEffect(
     () =>
@@ -99,6 +119,10 @@ function ConnectedBoard({
     // Close the panel if the card was deleted (possibly by someone else).
     if (openCardId && !openCard && state.synced) setOpenCardId(null);
   }, [openCardId, openCard, state.synced]);
+  useEffect(() => {
+    // Viewers only look; tell others "X is editing" just for writers.
+    setEditingCard(openCardId && !readOnly ? openCardId : null);
+  }, [openCardId, readOnly, setEditingCard]);
 
   if (state.fatal) {
     return (
@@ -138,9 +162,11 @@ function ConnectedBoard({
         <RoleBadge role={role} />
         {readOnly ? <span className="text-xs text-slate-500">View only</span> : null}
         <div className="ml-auto flex items-center gap-3">
+          <PresenceAvatars users={onlineUsers} />
           <ConnectionStatus state={state} />
         </div>
       </AppHeader>
+      <OfflineBanner state={state} />
 
       <main className="min-h-0 flex-1">
         {!ready ? (
@@ -154,8 +180,12 @@ function ConnectedBoard({
             readOnly={readOnly}
             userId={user.id}
             members={memberNames}
-            editorsByCard={new Map()}
+            editorsByCard={editorsByCard}
+            moversByCard={moversByCard}
             onOpenCard={setOpenCardId}
+            onDragCard={setDraggingCard}
+            onPointer={onPointer}
+            overlay={<LiveCursors peers={presence.peers} />}
           />
         )}
       </main>
@@ -169,10 +199,29 @@ function ConnectedBoard({
           readOnly={readOnly}
           me={me}
           members={members.data ?? []}
-          otherEditors={[]}
+          otherEditors={editorsByCard.get(openCard.id) ?? []}
           onClose={() => setOpenCardId(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function OfflineBanner({ state }: { state: ConnectionState }) {
+  if (!state.synced && state.phase !== 'offline') return null;
+  if (state.phase !== 'offline' && state.phase !== 'reconnecting') return null;
+  return (
+    <div
+      role="alert"
+      data-testid="offline-banner"
+      className={`px-4 py-1.5 text-center text-xs font-medium ${
+        state.phase === 'offline' ? 'bg-slate-700 text-white' : 'bg-amber-100 text-amber-900'
+      }`}
+    >
+      {state.phase === 'offline'
+        ? "You're offline. Keep working: changes are saved on this device and merge automatically when you reconnect."
+        : `Connection lost. Reconnecting with backoff (attempt ${Math.max(state.attempt, 1)})… your edits are safe.`}
+      {state.unsyncedChanges > 0 ? ` ${state.unsyncedChanges} change(s) pending.` : ''}
     </div>
   );
 }

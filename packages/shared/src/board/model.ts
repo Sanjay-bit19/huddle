@@ -283,7 +283,10 @@ export function addCard(doc: Y.Doc, input: NewCardInput, actor?: Actor): string 
     card.set('updatedBy', actor?.userId ?? null);
     cards.set(id, card);
     // Nested types must be integrated into the doc before they are edited.
-    if (input.description) setFragmentText(description, input.description.slice(0, 5000));
+    // Always start with one (possibly empty) paragraph. If the fragment were
+    // empty, every editor that opens the card would create its own first
+    // paragraph and two people typing at once would land on separate lines.
+    setFragmentText(description, (input.description ?? '').slice(0, 5000));
     let prevItems: { id: string; order: string }[] = [];
     for (const text of input.checklist ?? []) {
       const itemId = newId();
