@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+dist
+coverage
+packages/db/migrations
+playwright-report
+test-results
+load/results

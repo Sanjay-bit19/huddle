@@ -1,0 +1,335 @@
+import { sql } from 'drizzle-orm';
+import { ROLES } from '@huddle/shared';
+import {
+  bigserial,
+  customType,
+  jsonb,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+export const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => 'bytea',
+  toDriver: (value) => Buffer.from(value.buffer, value.byteOffset, value.byteLength),
+  fromDriver: (value) => new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
+});
+
+const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // Stored lower-cased (normalized by the Zod schema at the boundary).
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: createdAt(),
+});
+
+/**
+ * A login session == one refresh-token rotation family. Access tokens carry
+ * the session id (`sid`), and every authenticated request checks the session
+ * is not revoked, so logout / logout-everywhere / reuse detection invalidate
+ * outstanding access tokens immediately instead of after their TTL.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userAgent: text('user_agent'),
+    ip: text('ip'),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedReason: text('revoked_reason', {
+      enum: ['logout', 'logout_all', 'reuse_detected'],
+    }),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+/**
+ * Opaque refresh tokens, stored as SHA-256 hashes (a DB leak does not leak
+ * usable tokens). Every refresh marks the presented token used and issues its
+ * successor in the same session. Presenting an already-used token means a
+ * stolen token was replayed, so the whole session is revoked (reuse detection).
+ */
+export const refreshTokens = pgTable(
+  'refresh_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    replacedBy: uuid('replaced_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('refresh_tokens_token_hash_idx').on(t.tokenHash),
+    index('refresh_tokens_session_idx').on(t.sessionId),
+  ],
+);
+
+export type DbUser = typeof users.$inferSelect;
+export type DbSession = typeof sessions.$inferSelect;
+export type DbRefreshToken = typeof refreshTokens.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Workspaces, membership, invites
+// ---------------------------------------------------------------------------
+
+export const workspaceRole = pgEnum('workspace_role', ROLES);
+
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+});
+
+export const workspaceMembers = pgTable(
+  'workspace_members',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: workspaceRole('role').notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.userId] }),
+    index('workspace_members_user_idx').on(t.userId),
+  ],
+);
+
+/**
+ * Invite links are bearer secrets: only the SHA-256 of the token is stored,
+ * the raw token is shown once at creation. They always expire and can be
+ * capped by use count or revoked.
+ */
+export const invites = pgTable(
+  'invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    role: workspaceRole('role').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    maxUses: integer('max_uses'),
+    useCount: integer('use_count').notNull().default(0),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('invites_token_hash_idx').on(t.tokenHash),
+    index('invites_workspace_idx').on(t.workspaceId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Boards (metadata only; columns and cards live in the board's Yjs document)
+// ---------------------------------------------------------------------------
+
+export const boards = pgTable(
+  'boards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('boards_workspace_idx').on(t.workspaceId)],
+);
+
+export type DbWorkspace = typeof workspaces.$inferSelect;
+export type DbInvite = typeof invites.$inferSelect;
+export type DbBoard = typeof boards.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Board documents (Yjs persistence)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compacted Yjs state per board: Y.encodeStateAsUpdate of a doc that has had
+ * the snapshot plus every pending update applied (with GC on, so deleted
+ * content is reduced to tombstone ranges).
+ */
+export const boardDocuments = pgTable('board_documents', {
+  boardId: uuid('board_id')
+    .primaryKey()
+    .references(() => boards.id, { onDelete: 'cascade' }),
+  state: bytea('state').notNull(),
+  /** How many incremental updates have been folded into this snapshot, ever. */
+  compactedUpdates: integer('compacted_updates').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only log of incremental updates received since the last snapshot.
+ * Appending is cheap and happens within a few hundred ms of an edit, so a
+ * crash between (debounced) snapshots loses nothing. Compaction folds these
+ * into board_documents and deletes exactly the rows it folded.
+ */
+export const boardUpdates = pgTable(
+  'board_updates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    update: bytea('update').notNull(),
+    userId: uuid('user_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('board_updates_board_idx').on(t.boardId, t.id)],
+);
+
+// ---------------------------------------------------------------------------
+// AI usage accounting
+// ---------------------------------------------------------------------------
+
+/**
+ * Monthly token budget per user. `tokens_reserved` holds in-flight requests'
+ * worst-case cost (prompt estimate + max_tokens), so concurrent requests
+ * cannot jointly overspend; on completion the reservation is released and the
+ * actual usage reported by the provider is added to `tokens_used`.
+ */
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** UTC month, 'YYYY-MM'. */
+    period: text('period').notNull(),
+    tokensUsed: integer('tokens_used').notNull().default(0),
+    tokensReserved: integer('tokens_reserved').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.period] })],
+);
+
+/** One row per AI call: latency, tokens and outcome, for metrics and audits. */
+export const aiRequests = pgTable(
+  'ai_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    boardId: uuid('board_id').references(() => boards.id, { onDelete: 'set null' }),
+    feature: text('feature', { enum: ['notes_to_cards', 'summary', 'ask'] }).notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull().default(1),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    latencyMs: integer('latency_ms').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_requests_user_idx').on(t.userId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Activity log, comments, search projection
+// ---------------------------------------------------------------------------
+
+/** Derived from Yjs transactions by the collab node that received them. */
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    type: text('type').notNull(),
+    cardId: text('card_id'),
+    data: jsonb('data').$type<Record<string, string | null>>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('activity_board_idx').on(t.boardId, t.id),
+    index('activity_card_idx').on(t.boardId, t.cardId, t.id),
+  ],
+);
+
+/**
+ * Comments live in Postgres, not in the CRDT: they are append-mostly, need a
+ * server-verified author, and are moderated (deleted) by role.
+ */
+export const comments = pgTable(
+  'comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    cardId: text('card_id').notNull(),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('comments_card_idx').on(t.boardId, t.cardId, t.createdAt)],
+);
+
+const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
+
+/**
+ * Read model of cards for full-text search, projected from each board's Yjs
+ * document when the collab server compacts it. Weighted: title > labels >
+ * description. The GIN index makes workspace-wide search a single index scan.
+ */
+export const cardSearch = pgTable(
+  'card_search',
+  {
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => boards.id, { onDelete: 'cascade' }),
+    cardId: text('card_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    labels: text('labels').notNull(),
+    columnTitle: text('column_title').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    document: tsvector('document').generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(labels, '')), 'B') || setweight(to_tsvector('english', coalesce(body, '')), 'C')`,
+    ),
+  },
+  (t) => [
+    primaryKey({ columns: [t.boardId, t.cardId] }),
+    index('card_search_document_idx').using('gin', t.document),
+    index('card_search_workspace_idx').on(t.workspaceId),
+  ],
+);
